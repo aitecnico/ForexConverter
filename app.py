@@ -1,10 +1,11 @@
-from flask import Flask, render_template, request
+from flask import Flask, render_template, request, session, redirect
 from flask_debugtoolbar import DebugToolbarExtension
-from forex_python.converter import CurrencyRates
-from decimal import Decimal
+from forex_python.converter import CurrencyRates, RatesNotAvailableError
+from decimal import Decimal, DecimalException
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = "secret"
+app.config['DEBUG_TB_INTERCEPT_REDIRECTS'] = False
 
 debug = DebugToolbarExtension(app)
 
@@ -23,12 +24,29 @@ def show_amount():
 
     from_conv = request.args["convert_from"]
     to = request.args["convert_to"]
-    amount = Decimal(request.args["amount"])
+    try:
+        amount = Decimal(request.args["amount"])
+    except DecimalException:
+        session['error'] = "Amount Is Not Valid"
+        return redirect("/error")
+
     """ Request arguments """
 
     c = CurrencyRates()
-    text = c.convert(from_conv, to, amount)
+    try:
+        text = c.convert(from_conv, to, amount)
+    except RatesNotAvailableError:
+        session['error'] = "Invalid Currency Code"
+        return redirect("/error")
     """ Convert currency """
 
     return render_template("conversion.html", text=text)
     """ Append conversion.html to browser. """
+
+
+@app.route('/error')
+def get_error():
+    """ Display the home page with error message """
+
+    msg = session['error']
+    return render_template('error.html', msg=msg)
